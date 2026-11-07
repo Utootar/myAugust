@@ -6,15 +6,18 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 SERVER_NAME = "assistant"
-TZ = ZoneInfo(os.getenv("TZ_NAME", "Asia/Bangkok"))
+try:
+    TZ = ZoneInfo(os.getenv("TZ_NAME", "Asia/Bangkok"))
+except ZoneInfoNotFoundError:  # Windows ที่ไม่มีแพ็กเกจ tzdata
+    TZ = timezone(timedelta(hours=7), "ICT")
 DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).resolve().parent.parent / "data"))
 NOTES_FILE = DATA_DIR / "notes.json"
 
