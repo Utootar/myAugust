@@ -42,6 +42,13 @@ def describe_call(tool_name: str, tool_input: dict[str, Any]) -> str:
     return f"{tool_name}: {str(tool_input)[:300]}"
 
 
+def _workdir() -> str:
+    """โฟลเดอร์ทำงานของ agent — ค่าเริ่มต้นคือ ./workspace แยกจากโค้ดโปรเจกต์"""
+    path = os.getenv("AGENT_WORKDIR") or os.path.join(os.getcwd(), "workspace")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 class Agent:
     """ห่อ ClaudeSDKClient ให้คุยต่อเนื่องได้ (จำบทสนทนา) พร้อมระบบขออนุญาต"""
 
@@ -50,12 +57,12 @@ class Agent:
         self._lock = asyncio.Lock()  # ให้ประมวลผลทีละคำสั่ง
         self._client = ClaudeSDKClient(
             ClaudeAgentOptions(
-                model=os.getenv("MODEL", "claude-opus-5-5"),
+                model=os.getenv("MODEL", "claude-sonnet-5-5"),
                 system_prompt=SYSTEM_PROMPT,
                 mcp_servers={"assistant": build_server()},
                 allowed_tools=SAFE_TOOLS,
                 can_use_tool=self._can_use_tool,
-                cwd=cwd or os.getenv("AGENT_WORKDIR", os.getcwd()),
+                cwd=cwd or _workdir(),
                 max_turns=int(os.getenv("MAX_TURNS", "25")),
                 max_budget_usd=float(os.getenv("MAX_BUDGET_USD", "2.0")),  # เพดานต่อเซสชัน กันบิลบาน
             )

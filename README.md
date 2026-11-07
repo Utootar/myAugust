@@ -16,11 +16,16 @@ assistant/
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # แล้วกรอก ANTHROPIC_API_KEY
-set -a; source .env; set +a
 
-python -m assistant.cli     # ทดสอบก่อนด้วยการพิมพ์คุย
+# ติดตั้ง Claude Code (ต้องมี Node.js) แล้วล็อกอินด้วยบัญชี Pro ครั้งเดียว
+npm install -g @anthropic-ai/claude-code
+claude                      # พิมพ์ /login แล้วทำตามหน้าจอ จากนั้นออกด้วย /exit
+
+python -m assistant.cli     # ทดสอบด้วยการพิมพ์คุย (ยังไม่ต้องต่อ Telegram)
 ```
+
+ถ้าใช้ API key แทน Pro: `cp .env.example .env` ใส่ `ANTHROPIC_API_KEY` แล้ว `export` ก่อนรัน
+agent ทำงานในโฟลเดอร์ `./workspace` เท่านั้นโดยค่าเริ่มต้น
 
 ## ต่อ Telegram
 
