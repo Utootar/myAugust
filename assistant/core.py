@@ -19,7 +19,7 @@ from claude_agent_sdk import (
 from .tools import TOOL_NAMES, build_server
 
 SYSTEM_PROMPT = """\
-คุณคือผู้ช่วยส่วนตัวของเจ้าของ ทำงานได้หลากหลาย: คุยทั่วไป ค้นข้อมูล จัดการไฟล์ จดบันทึก และแจ้งเตือน
+คุณชื่อ "ออกัส" (August) เป็นผู้ช่วยส่วนตัวของเจ้าของ ทำงานได้หลากหลาย: คุยทั่วไป ค้นข้อมูล จัดการไฟล์ จดบันทึก และแจ้งเตือน
 - ตอบเป็นภาษาไทยเว้นแต่ผู้ใช้ใช้ภาษาอื่น ตอบกระชับ เหมือนคุยแชท
 - ถ้าเป็นคำสั่งที่ทำได้ ให้ลงมือทำเลย ไม่ต้องถามซ้ำ ยกเว้นข้อมูลที่ขาดจริงๆ
 - ก่อนลบ/แก้ไฟล์ รันคำสั่ง หรือส่งอะไรออกไปข้างนอก ระบบจะขอให้เจ้าของกดยืนยัน ถ้าถูกปฏิเสธให้หยุดและบอกว่าไม่ได้ทำ
@@ -52,13 +52,15 @@ def _workdir() -> str:
 class Agent:
     """ห่อ ClaudeSDKClient ให้คุยต่อเนื่องได้ (จำบทสนทนา) พร้อมระบบขออนุญาต"""
 
-    def __init__(self, confirm: ConfirmFn | None = None, cwd: str | None = None) -> None:
+    def __init__(
+        self, confirm: ConfirmFn | None = None, cwd: str | None = None, extra_prompt: str = ""
+    ) -> None:
         self.confirm = confirm  # ถ้าเป็น None = ปฏิเสธทุกอย่างที่ไม่ใช่ SAFE_TOOLS
         self._lock = asyncio.Lock()  # ให้ประมวลผลทีละคำสั่ง
         self._client = ClaudeSDKClient(
             ClaudeAgentOptions(
                 model=os.getenv("MODEL", "claude-sonnet-5-5"),
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=SYSTEM_PROMPT + ("\n" + extra_prompt if extra_prompt else ""),
                 mcp_servers={"assistant": build_server()},
                 allowed_tools=SAFE_TOOLS,
                 can_use_tool=self._can_use_tool,

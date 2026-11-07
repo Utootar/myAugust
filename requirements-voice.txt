@@ -1,0 +1,7 @@
+-r requirements.txt
+numpy
+sounddevice
+webrtcvad-wheels
+faster-whisper
+edge-tts
+pvporcupine   # เฉพาะถ้าจะใช้คำปลุก Porcupine

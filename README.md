@@ -9,6 +9,7 @@ assistant/
   tools.py         เครื่องมือที่เราเขียนเอง (เวลา, จดบันทึก, แจ้งเตือน) — เพิ่มได้ที่นี่
   cli.py           คุยผ่านเทอร์มินัล (ใช้ทดสอบ)
   telegram_bot.py  คุยผ่าน Telegram (ใช้งานจริง)
+  voice.py         พูดคุยด้วยเสียงต่อเนื่อง ชื่อ "ออกัส" (ดูหัวข้อโหมดเสียง)
 ```
 
 ## เริ่มใช้
@@ -26,6 +27,28 @@ python -m assistant.cli     # ทดสอบด้วยการพิมพ�
 
 ถ้าใช้ API key แทน Pro: `cp .env.example .env` ใส่ `ANTHROPIC_API_KEY` แล้ว `export` ก่อนรัน
 agent ทำงานในโฟลเดอร์ `./workspace` เท่านั้นโดยค่าเริ่มต้น
+
+## โหมดเสียง (ออกัส)
+
+```
+pip install -r requirements-voice.txt     # ครั้งแรกจะโหลดโมเดลฟังเสียงเพิ่ม (small ≈ 500 MB)
+python -m assistant.voice --devices       # ดูรายชื่อไมค์ (ถ้าต้องเลือก: set MIC_DEVICE=เลขอุปกรณ์)
+python -m assistant.voice
+```
+
+ทดสอบเป็นขั้นๆ ด้วยตัวแปร `WAKE_MODE`:
+
+| ค่า | ทำงานอย่างไร |
+|---|---|
+| `always` (ค่าเริ่มต้น) | ฟังตลอด ทุกประโยคส่งให้ออกัส — ใช้ทดสอบไมค์/ลำโพง/การฟังไทย |
+| `name` | ตอบเมื่อได้ยินคำว่า "ออกัส"/"August" (ตรวจจากข้อความที่ถอดได้ ไม่ต้องมีคีย์) |
+| `porcupine` | จับ "Hey August" ด้วย Porcupine — ตั้ง `PICOVOICE_ACCESS_KEY` และ `WAKE_PPN=path\to\file.ppn` |
+
+Windows (PowerShell): `$env:WAKE_MODE="name"; python -m assistant.voice`
+Windows (cmd): `set WAKE_MODE=name` แล้วรัน
+
+- ผลัดกันพูด: ระหว่างออกัสคิด/พูด ไมค์จะปิด (กันเสียงตัวเองย้อนเข้าไมค์) กดปุ่มใดก็ได้เพื่อให้หยุดพูด
+- ปรับได้: `WHISPER_MODEL` (tiny/base/small/medium), `TTS_VOICE` (`th-TH-NiwatNeural` = เสียงชาย), `VAD_LEVEL` 0-3, `END_SILENCE_MS`
 
 ## ต่อ Telegram
 
