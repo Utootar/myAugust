@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import warnings
 from typing import Any, Awaitable, Callable
 
 from claude_agent_sdk import (
@@ -17,6 +18,9 @@ from claude_agent_sdk import (
 )
 
 from .tools import TOOL_NAMES, build_server
+
+# เราตั้งใจให้เครื่องมืออ่านอย่างเดียวผ่านอัตโนมัติ จึงปิดคำเตือนนี้
+warnings.filterwarnings("ignore", message=r".*can_use_tool will not be invoked.*")
 
 SYSTEM_PROMPT = """\
 คุณชื่อ "ออกัส" (August) เป็นผู้ช่วยส่วนตัวของเจ้าของ ทำงานได้หลากหลาย: คุยทั่วไป ค้นข้อมูล จัดการไฟล์ จดบันทึก และแจ้งเตือน

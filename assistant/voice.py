@@ -1,6 +1,7 @@
 """โหมดเสียง: พูดคุยกับออกัสต่อเนื่อง ไม่ต้องกด Enter
 
 รัน:  python -m assistant.voice            (ดูรายการไมค์: python -m assistant.voice --devices)
+      ตรวจระบบเสียงทีละส่วน:  python -m assistant.voice --check
 
 โหมดคำปลุก (ตั้งด้วยตัวแปร WAKE_MODE):
   always     ฟังตลอด ทุกประโยคที่พูดส่งให้ออกัส            (ค่าเริ่มต้น — ใช้ทดสอบไมค์/ลำโพง)
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import faulthandler
 import io
 import os
 import queue
@@ -304,6 +306,39 @@ class PorcupineWake:
                     return
 
 
+# ---------------------------------------------------------------- ตรวจระบบ
+
+
+async def self_check(mic_dev: int | str | None) -> None:
+    import sounddevice as sd
+
+    rec = None
+    steps = ["ลำโพง", "เสียงพูด", "ไมค์", "ฟังเสียง"]
+    for i, name in enumerate(steps, 1):
+        print(f"\n[{i}/4] {name}")
+        try:
+            if name == "ลำโพง":
+                print("  ควรได้ยินเสียงบี๊บ")
+                beep()
+            elif name == "เสียงพูด":
+                t0 = time.monotonic()
+                audio = await TTS().synth("สวัสดีครับ ผมออกัส ทดสอบเสียง")
+                print(f"  สร้างเสียงใช้เวลา {time.monotonic() - t0:.1f} วินาที กำลังเล่น...")
+                _play(audio)
+            elif name == "ไมค์":
+                print("  พูดอะไรก็ได้ 4 วินาที... เริ่ม!")
+                rec = sd.rec(4 * SAMPLE_RATE, samplerate=SAMPLE_RATE, channels=1, dtype="float32", device=mic_dev)
+                sd.wait()
+                level = float(np.sqrt(np.mean(rec**2)))
+                print(f"  ระดับเสียง {level:.4f}", "(เบามาก ไมค์อาจไม่ได้ยิน/เลือกผิดตัว)" if level < 0.003 else "(ได้ยิน)")
+            elif name == "ฟังเสียง" and rec is not None:
+                text = STT().transcribe(rec[:, 0])
+                print(f"  ถอดได้ว่า: {text or '(ไม่ได้ยินคำพูด)'}")
+            print("  ✓ ผ่าน")
+        except Exception as e:
+            print(f"  ✗ ไม่ผ่าน: {type(e).__name__}: {e}")
+
+
 # ---------------------------------------------------------------- ลูปหลัก
 
 
@@ -311,16 +346,21 @@ async def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # ให้ Windows แสดงภาษาไทยได้
 
+    faulthandler.enable()  # ถ้าโปรแกรมล่มแบบไม่มี error จะพิมพ์จุดที่ล่มให้เห็น
     import webrtcvad
 
+    mic_dev = os.getenv("MIC_DEVICE")
+    mic_dev = int(mic_dev) if mic_dev and mic_dev.isdigit() else mic_dev
+    if "--check" in sys.argv:
+        await self_check(mic_dev)
+        return
     if "--devices" in sys.argv:
         import sounddevice as sd
 
         print(sd.query_devices())
         return
 
-    mic_dev = os.getenv("MIC_DEVICE")
-    mic = Mic(int(mic_dev) if mic_dev and mic_dev.isdigit() else mic_dev)
+    mic = Mic(mic_dev)
     vad = webrtcvad.Vad(int(os.getenv("VAD_LEVEL", "2")))  # 0 ไวน้อย - 3 ไวมาก
     stt, tts = STT(), TTS()
     wake = PorcupineWake(mic) if WAKE_MODE == "porcupine" else None
@@ -332,6 +372,7 @@ async def main() -> None:
         return answer.strip().lower() in ("y", "yes", "ใช่")
 
     agent = Agent(confirm=confirm, extra_prompt=VOICE_PROMPT)
+    print("กำลังเชื่อมต่อ Claude...")
     await agent.start()
     mic.start()
     print(f"โหมดคำปลุก: {WAKE_MODE} | กด Ctrl+C เพื่อออก | กดปุ่มใดๆ ระหว่างที่ออกัสพูด = หยุดพูด")
@@ -339,6 +380,7 @@ async def main() -> None:
     active_until = 0.0
     try:
         mic.mute()
+        print("กำลังพูดทักทาย...")
         await tts.speak("ออกัสพร้อมแล้วครับ")
         mic.unmute()
         while True:
@@ -350,22 +392,31 @@ async def main() -> None:
                 mic.flush()
                 active_until = time.monotonic() + CONV_WINDOW
             idle = max(0.5, active_until - time.monotonic()) if wake else None
+            print("🎤 กำลังฟัง... พูดได้เลย")
             audio = await asyncio.to_thread(listen_utterance, mic, vad, idle)
             if audio is None:
                 continue
+            print("…กำลังถอดเสียง")
             text = await asyncio.to_thread(stt.transcribe, audio)
             if not text:
+                print("(ไม่ได้ยินเป็นคำพูด ข้ามไป)")
                 continue
             print(f"คุณ: {text}")
             if WAKE_MODE == "name" and time.monotonic() > active_until and not has_wake_name(text):
+                print("(ไม่ได้เรียกชื่อออกัส ข้ามไป)")
                 continue
             mic.mute()
+            print("…ออกัสกำลังคิด")
             reply = await agent.ask(text)
             print(f"ออกัส: {reply}\n")
             await tts.speak(reply)
             mic.unmute()
             active_until = time.monotonic() + CONV_WINDOW
+    except Exception as e:
+        print(f"\n✗ เกิดข้อผิดพลาด: {type(e).__name__}: {e}")
+        raise
     finally:
+        print("กำลังปิด...")
         mic.stop()
         await agent.stop()
 
@@ -374,4 +425,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        pass
+        print("\nปิดออกัสแล้ว (Ctrl+C)")
