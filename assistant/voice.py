@@ -251,14 +251,23 @@ class TTS:
     def __init__(self) -> None:
         self.voice = os.getenv("TTS_VOICE", "th-TH-PremwadeeNeural")  # ชาย: th-TH-NiwatNeural
 
-    async def synth(self, text: str) -> np.ndarray:
+    async def synth(self, text: str, attempts: int = 3) -> np.ndarray:
+        """สร้างเสียง ลองใหม่อัตโนมัติ เพราะเซิร์ฟเวอร์ edge-tts ล้มเป็นพักๆ"""
         import edge_tts
 
-        mp3 = b""
-        async for chunk in edge_tts.Communicate(text, self.voice).stream():
-            if chunk["type"] == "audio":
-                mp3 += chunk["data"]
-        return await asyncio.to_thread(decode_mp3, mp3)
+        for attempt in range(1, attempts + 1):
+            try:
+                mp3 = b""
+                async for chunk in edge_tts.Communicate(text, self.voice).stream():
+                    if chunk["type"] == "audio":
+                        mp3 += chunk["data"]
+                return await asyncio.to_thread(decode_mp3, mp3)
+            except Exception as e:
+                if attempt == attempts:
+                    raise
+                print(f"[สร้างเสียงไม่สำเร็จ ลองใหม่ครั้งที่ {attempt + 1}: {e}]")
+                await asyncio.sleep(0.5 * attempt)
+        raise RuntimeError("unreachable")
 
     async def speak(self, text: str, on_start: Callable[[], None] | None = None) -> None:
         chunks = split_for_tts(text)
@@ -423,9 +432,10 @@ async def main() -> None:
             reply = await agent.ask(text)
             t_llm = time.monotonic() - t0
             print(f"ออกัส: {reply}")
+            print(f"⏱ ถอดเสียง {t_stt:.1f}s | Claude {t_llm:.1f}s", end="", flush=True)
             t0 = time.monotonic()
-            await tts.speak(reply, on_start=lambda: print(
-                f"⏱ ถอดเสียง {t_stt:.1f}s | Claude {t_llm:.1f}s | สร้างเสียง {time.monotonic() - t0:.1f}s\n"))
+            await tts.speak(reply, on_start=lambda: print(f" | สร้างเสียง {time.monotonic() - t0:.1f}s"))
+            print()
             mic.unmute()
             active_until = time.monotonic() + CONV_WINDOW
     except Exception as e:
