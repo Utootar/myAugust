@@ -1,0 +1,3 @@
+claude-agent-sdk>=0.2
+python-telegram-bot>=21
+tzdata; sys_platform == "win32"

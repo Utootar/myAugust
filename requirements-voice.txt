@@ -1,0 +1,8 @@
+-r requirements.txt
+numpy
+sounddevice
+webrtcvad-wheels
+faster-whisper
+edge-tts
+# optional: only needed for the "Hey August" Porcupine wake word
+pvporcupine
