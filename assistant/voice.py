@@ -36,7 +36,7 @@ FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000  # 480 ตัวอย่าง�
 TTS_RATE = 24000
 
 WAKE_MODE = os.getenv("WAKE_MODE", "always").lower()
-CONV_WINDOW = float(os.getenv("CONV_WINDOW", "10"))  # วินาที: คุยต่อได้โดยไม่ต้องเรียกชื่อซ้ำ
+CONV_WINDOW = float(os.getenv("CONV_WINDOW", "15"))  # วินาที: คุยต่อได้โดยไม่ต้องเรียกชื่อซ้ำ
 END_SILENCE_MS = int(os.getenv("END_SILENCE_MS", "900"))  # เงียบนานเท่านี้ถือว่าพูดจบ
 MAX_UTTERANCE_S = 25
 
@@ -260,7 +260,7 @@ class TTS:
                 mp3 += chunk["data"]
         return await asyncio.to_thread(decode_mp3, mp3)
 
-    async def speak(self, text: str) -> None:
+    async def speak(self, text: str, on_start: Callable[[], None] | None = None) -> None:
         chunks = split_for_tts(text)
         if not chunks:
             return
@@ -271,6 +271,8 @@ class TTS:
             except Exception as e:  # เน็ตหลุด ฯลฯ — ไม่ให้โปรแกรมล้ม
                 print(f"[พูดไม่ได้: {e}]")
                 return
+            if i == 0 and on_start:
+                on_start()
             if i + 1 < len(chunks):
                 nxt = asyncio.create_task(self.synth(chunks[i + 1]))  # สร้างท่อนถัดไประหว่างที่กำลังพูด
             if await asyncio.to_thread(_play, audio):
@@ -371,7 +373,13 @@ async def main() -> None:
         answer = await asyncio.to_thread(input, "อนุญาตไหม? [y/N] ")
         return answer.strip().lower() in ("y", "yes", "ใช่")
 
-    agent = Agent(confirm=confirm, extra_prompt=VOICE_PROMPT)
+    # โหมดเสียงต้องตอบไว: ใช้ Haiku + คิดน้อย (เปลี่ยนได้ด้วย VOICE_MODEL / VOICE_EFFORT)
+    agent = Agent(
+        confirm=confirm,
+        extra_prompt=VOICE_PROMPT,
+        model=os.getenv("VOICE_MODEL", "claude-haiku-5-5"),
+        effort=os.getenv("VOICE_EFFORT", "low"),
+    )
     print("กำลังเชื่อมต่อ Claude...")
     await agent.start()
     mic.start()
@@ -396,20 +404,28 @@ async def main() -> None:
             audio = await asyncio.to_thread(listen_utterance, mic, vad, idle)
             if audio is None:
                 continue
+            # เวลาที่เริ่มพูด (ไม่ใช่ตอนถอดเสียงเสร็จ) ใช้ตัดสินว่ายังอยู่ในช่วงคุยต่อไหม
+            spoke_at = time.monotonic() - len(audio) / SAMPLE_RATE
             print("…กำลังถอดเสียง")
+            t0 = time.monotonic()
             text = await asyncio.to_thread(stt.transcribe, audio)
+            t_stt = time.monotonic() - t0
             if not text:
                 print("(ไม่ได้ยินเป็นคำพูด ข้ามไป)")
                 continue
             print(f"คุณ: {text}")
-            if WAKE_MODE == "name" and time.monotonic() > active_until and not has_wake_name(text):
+            if WAKE_MODE == "name" and spoke_at > active_until and not has_wake_name(text):
                 print("(ไม่ได้เรียกชื่อออกัส ข้ามไป)")
                 continue
             mic.mute()
             print("…ออกัสกำลังคิด")
+            t0 = time.monotonic()
             reply = await agent.ask(text)
-            print(f"ออกัส: {reply}\n")
-            await tts.speak(reply)
+            t_llm = time.monotonic() - t0
+            print(f"ออกัส: {reply}")
+            t0 = time.monotonic()
+            await tts.speak(reply, on_start=lambda: print(
+                f"⏱ ถอดเสียง {t_stt:.1f}s | Claude {t_llm:.1f}s | สร้างเสียง {time.monotonic() - t0:.1f}s\n"))
             mic.unmute()
             active_until = time.monotonic() + CONV_WINDOW
     except Exception as e:

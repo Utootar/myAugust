@@ -57,13 +57,19 @@ class Agent:
     """ห่อ ClaudeSDKClient ให้คุยต่อเนื่องได้ (จำบทสนทนา) พร้อมระบบขออนุญาต"""
 
     def __init__(
-        self, confirm: ConfirmFn | None = None, cwd: str | None = None, extra_prompt: str = ""
+        self,
+        confirm: ConfirmFn | None = None,
+        cwd: str | None = None,
+        extra_prompt: str = "",
+        model: str | None = None,
+        effort: str | None = None,
     ) -> None:
         self.confirm = confirm  # ถ้าเป็น None = ปฏิเสธทุกอย่างที่ไม่ใช่ SAFE_TOOLS
         self._lock = asyncio.Lock()  # ให้ประมวลผลทีละคำสั่ง
         self._client = ClaudeSDKClient(
             ClaudeAgentOptions(
-                model=os.getenv("MODEL", "claude-sonnet-5-5"),
+                model=model or os.getenv("MODEL", "claude-sonnet-5-5"),
+                effort=effort or os.getenv("EFFORT") or None,
                 system_prompt=SYSTEM_PROMPT + ("\n" + extra_prompt if extra_prompt else ""),
                 mcp_servers={"assistant": build_server()},
                 allowed_tools=SAFE_TOOLS,
